@@ -7,26 +7,50 @@
 
 ## How to install
 To install the necessary dependencies for this project, follow these steps:
+
 1. **Clone the repository**
-```
+```bash
 git clone https://github.com/vayne1125/NYCU-Visual-Recognitionusing-Deep-Learning.git
+cd HW1_Image-Classification-Problem
 ```
 
-2. **Download the dataset**
-- Go to the following Google Drive link to download the dataset: [Download Dataset](https://drive.google.com/file/d/1fx4Z6xl5b6r4UFkBrn5l0oPEIagZxQ5u/view)
-- After downloading, place the dataset in the ./data directory of your project. If the ./data directory does not exist, create it:
-```
-mkdir ./data
-mv ./hw1_data/ ./data/
+2. **(Optional) Create a virtual environment**
+It is recommended to use a virtual environment. You can use Anaconda or venv.
+For Anaconda (Python 3.11.11):
+```bash
+conda create --name my_env python=3.11.11
+conda activate my_env
 ```
 
-3. **Create a virtual environment (optional but recommended)**
-I use anaconda with python 3.11.11
-
-4. **Install the dependencies:**
-```
-cd NYCU-Visual-Recognitionusing-Deep-Learning/HW1_Image-Classification-Problem
+3. **Install the dependencies:**
+```bash
 pip install -r requirements.txt
 ```
+You also need to install [PyTorch](https://pytorch.org/). Choose the appropriate CUDA version based on your system. For CUDA 12.4:
+```bash
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+```
+
+
+4. **Download the dataset**
+- Download the dataset from [this link](https://drive.google.com/file/d/1fx4Z6xl5b6r4UFkBrn5l0oPEIagZxQ5u/view)
+- After downloading, extract the dataset into the `HW1_Image-Classification-Problem` directory.
+- Ensure the directory structure looks like this:
+```
+HW1_Image-Classification-Problem
+├── data
+│   ├── test
+│   ├── train
+│   └── val
+├── datasets
+│   └── datasets.py
+├── requirement.txt
+├── params
+│   └── best_params.pt
+.
+.
+.
+```
+
 
 ## Performance snapshot
