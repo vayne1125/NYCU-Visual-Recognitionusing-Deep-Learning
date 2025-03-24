@@ -57,15 +57,15 @@ HW1_Image-Classification-Problem
 .
 ```
 ### 5. Set `config.yaml`
-Before running the model, configure config.yaml based on your needs:
-- **For best results**, you can directly run:
+Before running the model, configure config.yaml according to your preferences:
+- **For best results**, you can simply run the following commands without any additional changes to the configuration:
 ```bash
 python train.py
 python test.py
 ```
 
 ## Performance snapshot
-Ranked 12th as of March 24 (with the top 5 marked as N/A).
+Ranked 17th as of March 24 (with the top 5 marked as N/A).
 <img src="./assets/snapshot.png">
 
 ### About Best Parameter Info
