@@ -236,7 +236,7 @@ if __name__ == "__main__":
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
     # Optionally print images with labels to verify dataset labels
-    print_image_with_label(train_dataset)
+    # print_image_with_label(train_dataset)
 
     # =============================== Check GPU availability ==============================
 

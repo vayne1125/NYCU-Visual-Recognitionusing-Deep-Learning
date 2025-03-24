@@ -101,7 +101,8 @@ def _get_fc_layer(version, num_ftrs, class_number):
         )
 
     if version == 2:
-        # resnet101_w_imagenet1K2V_drop0.5_lrdynimc_tlr2_b64_e100_v1
+        # resnet101_w_imagenet1K2V_drop0.5_lrdynimc_tlr2_b64_e100_v1  / 0.90 / 0.94
+        # resnet50v2_b64_e100_lr0.0001_sd63   
         return nn.Sequential(
             nn.Linear(num_ftrs, 500),
             nn.ReLU(),
@@ -126,18 +127,6 @@ def _get_fc_layer(version, num_ftrs, class_number):
         )
 
     if version == 4:
-        # resnet101_w_imagenet1K2V_drop0.5_lrdynimc_tlr2_b64_e100_v4     - / 0.93
-        return nn.Sequential(
-            nn.Linear(num_ftrs, 512),
-            nn.BatchNorm1d(512),
-            nn.ReLU(),
-            nn.Linear(512, 256),
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Linear(256, class_number)
-        )
-
-    if version == 5:
         # resnet50_w_imagenet1K2V_drop0.5_lrdynimc_b64_e100_v5          0.88 / 0.93
         # resnet101_w_imagenet1K2V_drop0.5_lrdynimc_tlr2_b64_e100_v3    0.89 / 0.93
         return nn.Sequential(
@@ -159,4 +148,4 @@ def _get_fc_layer(version, num_ftrs, class_number):
             nn.Linear(256, class_number)
         )
 
-    raise ValueError(f"Invalid version {version}. Choose a version 0-5.")
+    raise ValueError(f"Invalid version {version}. Choose a version 0-4.")

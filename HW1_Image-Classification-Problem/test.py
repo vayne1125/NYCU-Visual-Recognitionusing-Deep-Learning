@@ -85,11 +85,20 @@ if __name__ == "__main__":
 
     # Extract testing configuration settings
     model_path = testing_config['params_pth']
+    enable_tta = testing_config['enable_tta']
 
     # Set the data directory path
     data_dir = data_config['data_dir']
 
     cudnn.benchmark = True  # Enable cuDNN auto-tuner for better performance
+
+    # Define Standard transformations    
+    standard_transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        ])
 
     # Define TTA transformations
     tta_transforms = [
@@ -110,7 +119,7 @@ if __name__ == "__main__":
 
         transforms.Compose([
             transforms.Resize(256),
-            transforms.RandomRotation(15),  # Rotate by ±15 degrees
+            transforms.RandomRotation(10),  # Rotate by ±10 degrees
             transforms.CenterCrop(224),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -128,6 +137,13 @@ if __name__ == "__main__":
     # Set test dataset dir with data_dir
     test_dir = os.path.join(data_dir, "test")
 
+    # Set transform
+    test_transform = None
+    if enable_tta:
+        test_transform = tta_transforms
+    else:
+        test_transform = standard_transform
+
     # Load training dataset to get the number of classes
     train_dataset = CustomDataset(data_dir=os.path.join(data_dir, "train"), transform=None)
     class_names = train_dataset.class_names  # Ensure class count consistency
@@ -144,4 +160,4 @@ if __name__ == "__main__":
     output_path = "prediction.csv"  # pylint: disable=invalid-name
 
     print(" == Testing started! ==")
-    test(model, model_path, test_dir, tta_transforms, output_path)
+    test(model, model_path, test_dir, test_transform, output_path)

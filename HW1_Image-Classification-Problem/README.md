@@ -6,9 +6,9 @@
 ## Introduction
 In this assignment, we aim to train a deep learning model for image classification using a dataset provided for the HW1 Image Classification Problem. Our goal is to develop a model that can accurately predict the class of given test images.
 
-To achieve this, we experimented with different model architectures, including ResNet-50, ResNet-101, ResNeXt-50, and ResNeXt-101. Additionally, we explored various fully connected (FC) layer structures to optimize performance. After extensive evaluation, we found that ResNeXt-101 achieved the best results. We also applied data augmentation techniques to enhance training robustness and implemented Test-Time Augmentation (TTA) to further improve the model's generalization ability.
+To achieve this, I experimented with different model architectures, including ResNet-50, ResNet-101, ResNeXt-50, and ResNeXt-101. Additionally, I explored various fully connected (FC) layer structures and fine-tuned the learning rate along with the hyperparameters of the CosineAnnealingLR scheduler, such as `T_max` and `eta_min`, to optimize performance. After extensive evaluation, I found that ResNeXt-101, combined with a well-tuned learning rate and CosineAnnealingLR scheduler, achieved the best results. I also applied data augmentation techniques to enhance training robustness and implemented Test-Time Augmentation (TTA) to further improve the model's generalization ability..
 
-The dataset consists of training, validation, and test sets. The model is trained using a cross-entropy loss function, and performance is evaluated based on classification accuracy. Our final model achieves an accuracy of 94% on the validation set, and we expect to obtain competitive results on the test set.
+The dataset consists of training, validation, and test sets. The model is trained using a cross-entropy loss function, and performance is evaluated based on classification accuracy. Our final model achieves an accuracy of 93% on the validation set and 96% on the public test set, demonstrating its strong generalization capability. I expect to obtain competitive results on the final test set.
 
 ## How to install
 To install the necessary dependencies for this project, follow these steps:
@@ -60,16 +60,16 @@ HW1_Image-Classification-Problem
 Before running the model, configure config.yaml based on your needs:
 - **For best results**, you can directly run:
 ```bash
+python train.py
 python test.py
 ```
-- **To train the model**, modify the `config.yaml` settings under the `training` section as needed.
-- **After training**, the terminal will display the name of the saved `.pt` model file.
-    - Copy this filename and paste it into the `testing/params_pth` field in `config.yaml` to use that model for testing.
 
 ## Performance snapshot
+Ranked 12th as of March 24 (with the top 5 marked as N/A).
+<img src="./assets/snapshot.png">
 
 ### About Best Parameter Info
-You can directly run `test.py` without modifying config.yaml to use the best settings.
+You can directly run `train.py` and `test.py` without modifying config.yaml to use the best settings.
 |Parameter|Value|
 |:---------:|-----|
 | Model   | ResNeXt-101 |
@@ -82,11 +82,12 @@ You can directly run `test.py` without modifying config.yaml to use the best set
 |Criterion|nn.CrossEntropyLoss()|
 |Early Stopping|epochs // 5|
 
-Loss and accuracy during training:
+Loss and accuracy during training:<br>
+<img src="./assets/loss_acc.jpg">
 
 
 
 |Phase|Accuracy (%)|
 |:---------:|:---:|
-|Validation |     |
-|Public Test|     |
+|Validation | 0.93 |
+|Public Test| 0.96 |
