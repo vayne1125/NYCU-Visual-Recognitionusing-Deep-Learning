@@ -17,5 +17,5 @@ data:
   data_dir: 'data/'
 
 testing:
-  enable_tta: false
+  enable_tta: true
   params_pth: './params/resnext101v1_b64_e100_lr0.0001_sd63.pt'
