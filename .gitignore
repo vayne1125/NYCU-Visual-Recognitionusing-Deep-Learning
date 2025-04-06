@@ -6,3 +6,15 @@ __pycache__
 /HW1_Image-Classification-Problem/local/*
 /HW1_Image-Classification-Problem/info/*
 /HW1_Image-Classification-Problem/params/*
+/HW1_Image-Classification-Problem/313551052_HW1.zip
+
+/HW2_Digit-Recognition-Problem/nycu-hw2-data
+/HW2_Digit-Recognition-Problem/params
+/HW2_Digit-Recognition-Problem/temp
+/HW2_Digit-Recognition-Problem/temp_test_predictions
+/HW2_Digit-Recognition-Problem/temp_val_predictions
+/HW2_Digit-Recognition-Problem/pred.csv
+/HW2_Digit-Recognition-Problem/pred.json
+/HW2_Digit-Recognition-Problem/test.zip
+/HW2_Digit-Recognition-Problem/tp.py
+# https://drive.google.com/file/d/13JXJ_hIdcloC63sS-vF3wFQLsUP1sMz5/view
