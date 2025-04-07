@@ -69,12 +69,19 @@ def ftrcnn2(num_classes=11, backbone_name='resnet50_fpn', pretrained=True, train
         torch.nn.Module: The Faster R-CNN model.
     """
     # 自定義 Anchor 設定 (適合小物件)
-    anchor_sizes = ((8,), (16,), (32,), (64,), (128,))
-    aspect_ratios = ((0.5, 1.0, 2.0),) * len(anchor_sizes)
+    # anchor_sizes = ((8,), (16,), (32,), (64,), (128,))
+    # aspect_ratios = ((0.5, 1.0, 2.0),) * len(anchor_sizes)
+
+    anchor_sizes = ((4,), (8,), (16,), (32,), (64,))
+    aspect_ratios = ((0.25, 0.5, 1.0, 1.75),) * len(anchor_sizes)
+
     anchor_generator = AnchorGenerator(sizes=anchor_sizes, aspect_ratios=aspect_ratios)
 
     if backbone_name == 'resnet50_fpn':
-        backbone = torchvision.models.detection.backbone_utils.resnet_fpn_backbone('resnet50', pretrained)
+        backbone = torchvision.models.detection.backbone_utils.resnet_fpn_backbone(
+                    backbone_name='resnet50',  # 使用關鍵字參數
+                    weights=torchvision.models.resnet.ResNet50_Weights.IMAGENET1K_V1
+                )
         in_features = backbone.out_channels
     elif backbone_name == 'mobilenet_v3_large_fpn':
         backbone = torchvision.models.detection.backbone_utils.mobilenet_v3_large_fpn(pretrained=pretrained)

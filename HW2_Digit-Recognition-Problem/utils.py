@@ -21,8 +21,79 @@ import matplotlib.pyplot as plt
 import numpy as np
 import yaml
 
-def visualize_predictions(images, preds, class_names=None, save_dir="temp_val_predictions", epoch=0, batch_idx=0, image_filenames=None):
-    """Visualizes a batch of images with predicted bounding boxes and labels."""
+def visualize_test_predictions(images, predictions, image_filenames, class_names, save_dir="temp_test_predictions"):
+    """
+    Visualizes predictions for the test set in a grid format, similar to validation visualization.
+
+    Args:
+        images (list of torch.Tensor): List of input images (tensors).
+        predictions (list of list of dict): A list where each element corresponds to an image.
+                                         Each element is a list of dictionaries, where each dictionary
+                                         represents a single detection with keys: 'bbox', 'category_id', 'score'.
+        image_filenames (list of str): List of corresponding image filenames.
+        class_names (list of str): List of class names.
+        save_dir (str, optional): Directory to save the visualizations.
+                                 Defaults to "temp_test_predictions".
+    """
+
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir, exist_ok=True)
+
+    num_images = len(images)
+    rows = 2  # 固定顯示 2 行
+    cols = (num_images + 1) // rows  # 根據圖片數量計算列數
+
+    fig, axes = plt.subplots(rows, cols, figsize=(15, 10))  # 建立子圖
+    axes = axes.flatten()
+
+    mean = torch.tensor([0.485, 0.456, 0.406]).reshape(3, 1, 1)  # ImageNet mean
+    std = torch.tensor([0.229, 0.224, 0.225]).reshape(3, 1, 1)  # ImageNet std
+
+    for i in range(num_images):
+        ax = axes[i]
+        img_tensor = images[i].cpu()
+
+        # 反歸一化
+        img_tensor = img_tensor * std + mean
+        img_tensor = torch.clamp(img_tensor, 0, 1)
+
+        ax.imshow(img_tensor.permute(1, 2, 0))
+        title = ""
+        if image_filenames and i < len(image_filenames):
+            title = f"{image_filenames[i]}\n"
+        ax.set_title(title)
+        ax.axis('off')
+
+        # 畫 prediction boxes
+        image_preds = predictions[i]  # Get predictions for the current image
+
+        for pred in image_preds:
+            bbox = pred['bbox']
+            category_id = pred['category_id']
+            score = pred['score']
+
+            xmin, ymin, width, height = bbox
+            xmax = xmin + width
+            ymax = ymin + height
+
+            rect = patches.Rectangle((xmin, ymin), width, height, linewidth=1,
+                                     edgecolor='lime', facecolor='none')
+            ax.add_patch(rect)
+
+            if class_names is not None and len(class_names) > category_id - 1:
+                label_name = class_names[category_id - 1]  # category_id is 1-indexed
+                label_text = f"{label_name}({score:.2f})"
+                ax.text(xmin, ymin - 5, s=label_text, color='red', fontsize=8,
+                        bbox=dict(facecolor='white', alpha=0.8))
+
+    save_path = os.path.join(save_dir, "test_predictions.png")  # Save all test images to one file
+    plt.tight_layout()  # 自動調整子圖參數，使之填充整個畫布
+    plt.savefig(save_path)
+    plt.close()
+    print(f"Test predictions saved to {save_path}")
+
+def visualize_predictions(images, preds, gt_boxes=None, gt_labels=None, class_names=None, save_dir="temp_val_predictions", epoch=0, batch_idx=0, image_filenames=None):
+    """Visualizes a batch of images with predicted and ground truth bounding boxes and labels."""
     if not os.path.exists(save_dir):
         os.makedirs(save_dir, exist_ok=True)
     save_path = os.path.join(save_dir, f"epoch_{epoch}_batch_{batch_idx}_predictions.png")
@@ -52,6 +123,25 @@ def visualize_predictions(images, preds, class_names=None, save_dir="temp_val_pr
         ax.set_title(title)
         ax.axis('off')
 
+        # 畫 ground truth boxes
+        if gt_boxes is not None and gt_labels is not None and i < len(gt_boxes):
+            gt_boxes_for_image = gt_boxes[i].cpu().tolist()
+            gt_labels_for_image = gt_labels[i].cpu().tolist()
+            for j, box in enumerate(gt_boxes_for_image):
+                xmin, ymin, xmax, ymax = box
+                rect_xmin = xmin
+                rect_ymin = ymin
+                rect_width = xmax - xmin
+                rect_height = ymax - ymin
+                rect = patches.Rectangle((rect_xmin, rect_ymin), rect_width, rect_height, linewidth=1, edgecolor='blue', facecolor='none') # 使用藍色標示 GT 框
+                ax.add_patch(rect)
+                if class_names is not None and len(class_names) > gt_labels_for_image[j]:
+                    label_index = gt_labels_for_image[j]
+                    label_name = class_names[label_index]
+                    label_text = f"GT:{label_name}"
+                    ax.text(xmin, ymin - 15, label_text, color='blue', fontsize=8, bbox=dict(facecolor='white', alpha=0.8))
+
+        # 畫 prediction boxes
         pred = preds[i]
         pred_labels = pred['labels'].cpu().tolist()
         pred_boxes = pred['boxes'].cpu().tolist()
@@ -203,7 +293,7 @@ def plot_training_history(history, save_name):
     # --- Plot the Loss ---
     plt.subplot(1, 2, 1)
     plt.plot(history['loss'], label='train loss')
-    plt.plot(history['val_loss'], label='valid loss')
+    # plt.plot(history['val_loss'], label='valid loss')
     plt.xlabel('epoch')
     plt.ylabel('Loss')
     plt.grid(True)

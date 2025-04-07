@@ -13,8 +13,9 @@ __pycache__
 /HW2_Digit-Recognition-Problem/temp
 /HW2_Digit-Recognition-Problem/temp_test_predictions
 /HW2_Digit-Recognition-Problem/temp_val_predictions
-/HW2_Digit-Recognition-Problem/pred.csv
-/HW2_Digit-Recognition-Problem/pred.json
-/HW2_Digit-Recognition-Problem/test.zip
-/HW2_Digit-Recognition-Problem/tp.py
+/HW2_Digit-Recognition-Problem/*.csv
+/HW2_Digit-Recognition-Problem/*.json
+/HW2_Digit-Recognition-Problem/*.zip
+/HW2_Digit-Recognition-Problem/local_store
+/HW2_Digit-Recognition-Problem/info
 # https://drive.google.com/file/d/13JXJ_hIdcloC63sS-vF3wFQLsUP1sMz5/view

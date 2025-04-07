@@ -25,8 +25,10 @@ import torchvision
 import albumentations as A
 import torchvision.transforms as T
 from albumentations.pytorch import ToTensorV2
-from model import ftrcnn
+from model import ftrcnn, ftrcnn2
 from torchmetrics.detection import MeanAveragePrecision
+from torch.optim.lr_scheduler import CosineAnnealingLR
+
 # Custom modules
 from datasets import CustomDataset
 from utils import (
@@ -154,7 +156,11 @@ def train_model(model, dataloaders, dataset_sizes, config):
                                 img_id = target['image_id'].item()
                                 img_info = dataloaders['val'].dataset.data['images'][img_id]
                                 image_filenames.append(img_info['file_name'])
-                            visualize_predictions(images, nms_preds, class_names=train_dataset.class_names, save_dir = "temp_val_predictions" , epoch=epoch, batch_idx=batch_idx, image_filenames=image_filenames)
+                            
+                            gt_boxes = [target['boxes'] for target in targets]
+                            gt_labels = [target['labels'] for target in targets]
+                            
+                            visualize_predictions(images, nms_preds, gt_boxes=gt_boxes, gt_labels=gt_labels, class_names=train_dataset.class_names, save_dir="temp_val_predictions", epoch=epoch, batch_idx=batch_idx, image_filenames=image_filenames)
 
                 # statistics
                 if isinstance(outputs, dict):
@@ -213,7 +219,7 @@ if __name__ == "__main__":
 
     data_dir = 'nycu-hw2-data'
     # save_name = f"{model_type}{model_layer}v{model_version}_b{batch_size}_e{epochs}_lr{lr}_sd{seed}"
-    save_name = "test"
+    save_name = "resnet50_fpn_trainall_eta_1e-6_tmax_20"
     # Set random seed for reproducibility
     set_seed(63)
 
@@ -243,7 +249,7 @@ if __name__ == "__main__":
     val_loader = DataLoader(val_dataset, batch_size=8, shuffle=False, num_workers=4, collate_fn=collate_fn_custom)
 
     # Optionally print images with labels to verify dataset labels
-    # print_image_with_label_for_detection(train_dataset)
+    print_image_with_label_for_detection(train_dataset)
     # exit()
     # =============================== Check GPU availability ==============================
 
@@ -264,10 +270,10 @@ if __name__ == "__main__":
     scheduler = None
 
     num_classes = 10
-    model = ftrcnn(num_classes=10, backbone_name='resnet50_fpn', pretrained=True)
+    # model = ftrcnn(num_classes=10, backbone_name='resnet50_fpn', pretrained=True)
 
     # test in 3090
-    # model = ftrcnn(num_classes=11, backbone_name='resnet50_fpn', pretrained=True, train_all_layers=True)
+    model = ftrcnn2(num_classes=10, backbone_name='resnet50_fpn', pretrained=True, train_all_layers=True)
     
     # Set early stopping patience
     # patience = epochs//5
@@ -280,15 +286,12 @@ if __name__ == "__main__":
     learning_rate = 0.0001 # 可以嘗試 1e-4, 3e-4 等
     weight_decay = 0.0001
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-
-    step_size = 3  # 每隔 3 個 epoch 降低學習率
-    gamma = 0.1    # 學習率降低的比例 (例如降低到原來的 1/10)
-    scheduler = StepLR(optimizer, step_size=step_size, gamma=gamma)
+    scheduler = CosineAnnealingLR(optimizer, T_max=20, eta_min=0.000001)
 
     training_config = {
         'optimizer': optimizer,
         'num_epochs': 20,
-        'patience': 20,
+        'patience': 5,
         'scheduler': scheduler,
         'save_pt_path': "./params/" + save_name + ".pt"
     }

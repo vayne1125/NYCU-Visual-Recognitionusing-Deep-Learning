@@ -20,11 +20,11 @@ import torch
 from torchvision import transforms
 from torch.backends import cudnn
 
-from model import ftrcnn
+from model import ftrcnn, ftrcnn2
 from datasets import CustomDataset
-from utils import load_config, visualize_predictions, set_seed
+from utils import load_config, visualize_predictions, set_seed, visualize_test_predictions
 
-def test_task1(model, model_path, test_dir, transform, output_json_path, visualize=False, num_visualize=12):
+def test_task1(model, model_path, test_dir, transform, output_json_path, visualize=False, num_visualize=12, visualize_path = "temp_test_predictions"):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model.load_state_dict(torch.load(model_path, map_location=device))
     model = model.to(device)
@@ -36,16 +36,8 @@ def test_task1(model, model_path, test_dir, transform, output_json_path, visuali
     visualization_preds = []
     visualization_filenames = []
 
-    if visualize:
-        if len(image_files) > num_visualize:
-            visualize_files = random.sample(image_files, num_visualize)
-        else:
-            visualize_files = image_files
-    else:
-        visualize_files = []
-
     with torch.no_grad():
-        for image_file in image_files:
+        for i, image_file in enumerate(image_files):
             image_path = os.path.join(test_dir, image_file)
             image = Image.open(image_path).convert("RGB")
             img_tensor = transform(image).unsqueeze(0).to(device)
@@ -55,11 +47,11 @@ def test_task1(model, model_path, test_dir, transform, output_json_path, visuali
             image_id = int(os.path.splitext(image_file)[0])
 
             current_image_predictions = []
-            for i in range(len(output['boxes'])):
-                score = output['scores'][i].item()
+            for j in range(len(output['boxes'])):
+                score = output['scores'][j].item()
                 if score > 0.5:
-                    bbox = output['boxes'][i].cpu().tolist()
-                    label_index = output['labels'][i].item()
+                    bbox = output['boxes'][j].cpu().tolist()
+                    label_index = output['labels'][j].item()
                     category_id = label_index + 1
                     width = bbox[2] - bbox[0]
                     height = bbox[3] - bbox[1]
@@ -72,25 +64,32 @@ def test_task1(model, model_path, test_dir, transform, output_json_path, visuali
                         "category_id": category_id
                     })
                     current_image_predictions.append({
-                        'boxes': torch.tensor([bbox]).cpu(),
-                        'labels': torch.tensor([label_index]).cpu(),
-                        'scores': torch.tensor([score]).cpu()
+                        'bbox': bbox_wh,
+                        'category_id': category_id,
+                        'score': score
                     })
 
-            if visualize and image_file in visualize_files:
+            if visualize and i < 8:  # Store data for the first 8 images
                 visualization_images.append(img_tensor.squeeze(0).cpu())
-                visualization_preds.append(current_image_predictions[0] if current_image_predictions else {'boxes': torch.empty(0, 4), 'labels': torch.empty(0, dtype=torch.int64), 'scores': torch.empty(0)}) # Handle no detections
+                visualization_preds.append(current_image_predictions)
                 visualization_filenames.append(image_file)
 
+            if visualize and i == 7:
+                class_names = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+                visualize_test_predictions(images=visualization_images,
+                                          predictions=visualization_preds,
+                                          class_names=class_names,
+                                          save_dir=visualize_path,
+                                          image_filenames=visualization_filenames)
+                # Clear lists after visualization
+                visualization_images.clear()
+                visualization_preds.clear()
+                visualization_filenames.clear()
 
     with open(output_json_path, 'w') as f:
         json.dump(predictions, f, indent=4)
 
     print(f"Task 1 predictions saved to {output_json_path}")
-
-    if visualize and visualization_images:
-        class_names = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
-        visualize_predictions(visualization_images, visualization_preds, class_names=class_names, save_dir="temp_test_predictions", image_filenames=visualization_filenames)
 
 
 test_transform = transforms.Compose([
@@ -153,15 +152,18 @@ if __name__ == "__main__":
     set_seed(63)
     test_dir = os.path.join(data_dir, "test")
 
-    # Define your object detection model here
-    model = ftrcnn(num_classes=10, backbone_name='resnet50_fpn', pretrained=True) # Adjust num_classes
-    model_path = "params/test.pt" # Use the path to your trained object detection model
+    save_name = "resnet50_fpn_trainall_eta_1e-6_tmax_20"
 
-    output_json_path = "pred.json"
-    output_csv_path = "pred.csv"
+    # Define your object detection model here
+    model = ftrcnn2(num_classes=10, backbone_name='resnet50_fpn', pretrained=False, train_all_layers=False)
+    # model = ftrcnn(num_classes=10, backbone_name='resnet50_fpn', pretrained=True) # Adjust num_classes
+    model_path = "params/" + save_name + ".pt" # Use the path to your trained object detection model
+
+    output_json_path = save_name + "/pred.json"
+    output_csv_path = save_name + "/pred.csv"
 
     print(" == Task 1 Testing started! ==")
-    test_task1(model, model_path, test_dir, test_transform, output_json_path, visualize=True)
+    test_task1(model, model_path, test_dir, test_transform, output_json_path, visualize=True, visualize_path = "temp/" + save_name)
 
     print(" == Task 2 Testing started! ==")
     test_task2(output_json_path, test_dir, output_csv_path)
