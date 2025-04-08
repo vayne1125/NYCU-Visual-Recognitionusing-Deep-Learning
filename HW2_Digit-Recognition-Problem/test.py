@@ -152,15 +152,15 @@ if __name__ == "__main__":
     set_seed(63)
     test_dir = os.path.join(data_dir, "test")
 
-    save_name = "resnet50_fpn_trainall_eta_1e-6_tmax_20"
+    save_name = "resnet101_fpn_trainall_eta_2e-5_tmax_20"
 
     # Define your object detection model here
     model = ftrcnn2(num_classes=10, backbone_name='resnet50_fpn', pretrained=False, train_all_layers=False)
     # model = ftrcnn(num_classes=10, backbone_name='resnet50_fpn', pretrained=True) # Adjust num_classes
     model_path = "params/" + save_name + ".pt" # Use the path to your trained object detection model
 
-    output_json_path = save_name + "/pred.json"
-    output_csv_path = save_name + "/pred.csv"
+    output_json_path = "pred.json"
+    output_csv_path = "pred.csv"
 
     print(" == Task 1 Testing started! ==")
     test_task1(model, model_path, test_dir, test_transform, output_json_path, visualize=True, visualize_path = "temp/" + save_name)

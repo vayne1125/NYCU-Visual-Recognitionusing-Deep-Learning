@@ -52,7 +52,7 @@ def ftrcnn(num_classes=10, backbone_name='mobilenet_v3_large_fpn', pretrained=Tr
 # model = ftrcnn(num_classes=11, backbone_name='mobilenet_v3_large_fpn', pretrained=True)
 
 
-def ftrcnn2(num_classes=11, backbone_name='resnet50_fpn', pretrained=True, train_all_layers=False):
+def ftrcnn2(num_classes=10, backbone_name='resnet50_fpn', pretrained=True, train_all_layers=False):
     """
     Returns a Faster R-CNN model with specified backbone,
     adjusted for a specified number of output classes, with options for
@@ -85,6 +85,12 @@ def ftrcnn2(num_classes=11, backbone_name='resnet50_fpn', pretrained=True, train
         in_features = backbone.out_channels
     elif backbone_name == 'mobilenet_v3_large_fpn':
         backbone = torchvision.models.detection.backbone_utils.mobilenet_v3_large_fpn(pretrained=pretrained)
+        in_features = backbone.out_channels
+    elif backbone_name == 'resnet101_fpn':
+        backbone = torchvision.models.detection.backbone_utils.resnet_fpn_backbone(
+            backbone_name='resnet101', # 使用關鍵字參數
+            weights=torchvision.models.resnet.ResNet101_Weights.IMAGENET1K_V1 if pretrained else None
+        )
         in_features = backbone.out_channels
     else:
         raise ValueError(f"Unsupported backbone name: {backbone_name}")

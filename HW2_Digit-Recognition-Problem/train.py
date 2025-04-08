@@ -219,7 +219,7 @@ if __name__ == "__main__":
 
     data_dir = 'nycu-hw2-data'
     # save_name = f"{model_type}{model_layer}v{model_version}_b{batch_size}_e{epochs}_lr{lr}_sd{seed}"
-    save_name = "resnet50_fpn_trainall_eta_1e-6_tmax_20"
+    save_name = "resnet101_fpn_trainall_eta_2e-5_tmax_20"
     # Set random seed for reproducibility
     set_seed(63)
 
@@ -273,8 +273,12 @@ if __name__ == "__main__":
     # model = ftrcnn(num_classes=10, backbone_name='resnet50_fpn', pretrained=True)
 
     # test in 3090
-    model = ftrcnn2(num_classes=10, backbone_name='resnet50_fpn', pretrained=True, train_all_layers=True)
+    # model = ftrcnn2(num_classes=10, backbone_name='resnet50_fpn', pretrained=True, train_all_layers=True)
     
+    # resnet101_fpn_trainall_eta_2e-5_tmax_20
+    # test in huihui computer
+    model = ftrcnn2(num_classes=10, backbone_name='resnet101_fpn', pretrained=True, train_all_layers=True)
+
     # Set early stopping patience
     # patience = epochs//5
 
@@ -286,7 +290,7 @@ if __name__ == "__main__":
     learning_rate = 0.0001 # 可以嘗試 1e-4, 3e-4 等
     weight_decay = 0.0001
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-    scheduler = CosineAnnealingLR(optimizer, T_max=20, eta_min=0.000001)
+    scheduler = CosineAnnealingLR(optimizer, T_max=20, eta_min=0.000005)
 
     training_config = {
         'optimizer': optimizer,
