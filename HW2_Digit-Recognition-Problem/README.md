@@ -91,7 +91,7 @@ You can directly run `train.py` and `test.py` to use the best settings.
 | Early Stopping           | 5                                                  |
 
 Loss (Train) and mAP (Validation):<br>
-<img src="./assets/loss.jpg">
+<img src="./assets/loss.png">
 
 
 | Phase            | Validation mAP | Public Task1 | Public Task2 |
