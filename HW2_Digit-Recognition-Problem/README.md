@@ -65,11 +65,11 @@ python test.py
 ```
 
 ## Performance snapshot
-Ranked xth as of April 15 (with the top x marked as N/A).
+Ranked 62th as of April 16 (with the top 2 marked as N/A).
 <img src="./assets/snapshot.png">
 
 ### About Best Parameter Info
-You can directly run `train.py` and `test.py` without modifying config.yaml to use the best settings.
+You can directly run `train.py` and `test.py` to use the best settings.
 | Parameter                | Value                                             |
 |:-------------------------|:--------------------------------------------------|
 | Model                    | Faster R-CNN (ResNet-50-FPN)                      |
