@@ -5,10 +5,6 @@ import torchvision
 from torchvision.models.detection.rpn import AnchorGenerator
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection import FasterRCNN_ResNet50_FPN_Weights
-import torchvision.models as models
-from torchvision.models.detection import FasterRCNN
-from torchvision.models.detection.rpn import AnchorGenerator
-from torchvision.models.detection.backbone_utils import BackboneWithFPN
 
 def ftrcnn(num_classes=11):
     """
@@ -85,9 +81,9 @@ def light_ftrcnn(num_classes=11):
 
     # Modify the model's ROI head
     model.roi_heads.positive_fraction = 0.25  # Default 0.5
-    model.roi_heads.batch_size_per_image = 512  # Default 512, can reduce to improve training
-    model.roi_heads.box_nms_thresh = 0.3  # Default 0.5, reduce for stricter NMS
-    model.roi_heads.box_score_thresh = 0.5  # Default 0.05, higher to reduce false positives
+    model.roi_heads.batch_size_per_image = 512  # Default 512
+    model.roi_heads.box_nms_thresh = 0.3  # Default 0.5
+    model.roi_heads.box_score_thresh = 0.5  # Default 0.05
 
     # Reduce the number of RoI Align layers (i.e., decrease the number of layers in the ROI head)
     model.roi_heads.box_roi_pool = torchvision.ops.MultiScaleRoIAlign(

@@ -198,7 +198,7 @@ if __name__ == "__main__":
     cudnn.benchmark = True
     set_seed(63)
     TEST_DIR = os.path.join(DATA_DIR, "test/")
-    SAVE_NAME = "resnet50_fpn_light"
+    SAVE_NAME = "resnet50_fpn_stLR3_0.1_nms0.3_b8_e20_small_obj_st0.5"
 
     MODEL_PATH = "params/" + SAVE_NAME + ".pt"
 

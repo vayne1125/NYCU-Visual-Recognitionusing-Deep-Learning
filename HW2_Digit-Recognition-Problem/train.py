@@ -228,7 +228,7 @@ def train_model(model, dataloaders, dataset_sizes, config, writer):
 
 if __name__ == "__main__":
     DATA_DIR = 'nycu-hw2-data'
-    SAVE_NAME = "resnet50_fpn_light"
+    SAVE_NAME = "resnet50_fpn_stLR3_0.1_nms0.3_b8_e20_small_obj_st0.5"
     writer = SummaryWriter(f'runs/{SAVE_NAME}')
 
     set_seed(63)
