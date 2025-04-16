@@ -16,7 +16,7 @@ import torchvision.transforms as T
 from torchmetrics.detection import MeanAveragePrecision
 
 # Custom modules
-from model import ftrcnn
+from model import ftrcnn, light_ftrcnn
 from datasets import CustomDataset
 from utils import (
     save_model_info,
@@ -228,7 +228,7 @@ def train_model(model, dataloaders, dataset_sizes, config, writer):
 
 if __name__ == "__main__":
     DATA_DIR = 'nycu-hw2-data'
-    SAVE_NAME = "resnet50_fpn_stLR3_0.1_nms0.3_b8_e20_small_obj_st0.5_ver"
+    SAVE_NAME = "resnet50_fpn_light"
     writer = SummaryWriter(f'runs/{SAVE_NAME}')
 
     set_seed(63)
@@ -276,8 +276,9 @@ if __name__ == "__main__":
     scheduler = None
 
     NUM_CLASSES = 11
-    model = ftrcnn(num_classes=NUM_CLASSES)
-
+    # model = ftrcnn(num_classes=NUM_CLASSES)
+    model = light_ftrcnn(NUM_CLASSES)
+    
     # Define optimizer and scheduler
     LEARNING_RATE = 0.0001 # Can try 1e-4, 3e-4 etc.
     WEIGHT_DECAY = 0.0001
