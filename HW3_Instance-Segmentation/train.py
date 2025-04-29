@@ -7,6 +7,7 @@ import os
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.tensorboard import SummaryWriter
 from collections import defaultdict
+import gc
 
 # Third-party libraries
 import torch
@@ -16,7 +17,6 @@ import torchvision
 import torchvision.transforms as T
 from torchmetrics.detection import MeanAveragePrecision
 import json
-import numpy as np
 
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
@@ -30,7 +30,7 @@ from utils import (
     print_image_with_mask_for_segmentation,
     save_model_info,
     plot_training_history,
-    encode_mask
+    convert_to_coco_format
 )
 
 
@@ -75,22 +75,9 @@ def train_model(model, dataloaders, dataset_sizes, config, writer):
 
             running_loss = 0.0
 
-            # Lists to store COCO-formatted predictions and ground truths for the entire validation epoch
-            # Note: Accumulating for the whole epoch is the standard COCO eval approach
-            # If validation set is very large, this might consume significant memory.
-            # For smaller datasets, this is fine.
-            coco_gt_annotations_epoch = []
-            coco_dt_annotations_epoch = []
-            image_ids_epoch = [] # Keep track of image IDs in the validation set
-
-            # Get image info and category info from the validation dataset instance
-            if phase == 'val':
-                val_dataset_instance = dataloaders[phase].dataset
-                # Assuming dataset has images_info and categories_info attributes from JSON loading
-                images_info_val = val_dataset_instance.images_info
-                categories_info_val = val_dataset_instance.categories_info
-                # Create a mapping for quick access to image info by ID
-                image_id_to_info_val = {img['id']: img for img in images_info_val}
+            # --- For val phase: collect outputs and targets for COCO evaluation ---
+            outputs_list = []
+            targets_list = []
 
             # Iterate over data.
             print(f"Phase: {phase}")
@@ -122,93 +109,24 @@ def train_model(model, dataloaders, dataset_sizes, config, writer):
                         # backward + optimize only if in training phase
                         losses.backward()
                         optimizer.step()
+                        scheduler.step()
 
                     else: # val phase, the model returns predictions
                         # outputs is a list of dictionaries, one dictionary per image in the batch
                         # Each dictionary contains 'boxes', 'labels', 'scores', and 'masks'
                         preds = outputs
-
-                        # --- Convert predictions and targets to COCO format for COCOeval ---
-                        for i in range(len(preds)): # Iterate through each image in the batch
-                            img_id = targets[i]['image_id'].item()
-                            image_ids_epoch.append(img_id) # Collect image IDs for epoch evaluation
-
-                            # Convert Ground Truth to COCO format
-                            # Assuming targets[i] contains 'boxes', 'labels', 'masks', 'image_id', 'area', 'iscrowd'
-                            # 'iscrowd' might not be in your targets, default to 0
-                            for j in range(len(targets[i]['boxes'])):
-                                gt_ann = {
-                                    'image_id': img_id,
-                                    'category_id': targets[i]['labels'][j].item(),
-                                    'bbox': targets[i]['boxes'][j].tolist(), # [x_min, y_min, x_max, y_max] -> COCO [x, y, w, h]
-                                    'segmentation': targets[i]['masks'][j].cpu().numpy(), # Mask tensor -> numpy array
-                                    'area': (targets[i]['boxes'][j][2] - targets[i]['boxes'][j][0]) * (targets[i]['boxes'][j][3] - targets[i]['boxes'][j][1]), # Calculate area
-                                    'iscrowd': targets[i].get('iscrowd', torch.tensor([0])).tolist()[0], # Default iscrowd to 0
-                                    'id': len(coco_gt_annotations_epoch) + 1 # Assign a unique ID for the annotation
-                                }
-                                # Convert bbox from [x_min, y_min, x_max, y_max] to [x, y, w, h] for COCO
-                                x_min, y_min, x_max, y_max = gt_ann['bbox']
-                                gt_ann['bbox'] = [x_min, y_min, x_max - x_min, y_max - y_min]
-
-                                # Convert mask numpy array to RLE format
-                                # pycocotools.mask.encode expects Fortran contiguous numpy array
-                                # Need to squeeze the channel dimension if it exists (shape [H, W])
-                                mask_np = gt_ann['segmentation']
-                                if mask_np.ndim == 3 and mask_np.shape[0] == 1:
-                                     mask_np = mask_np.squeeze(0)
-
-                                # Ensure mask is boolean or uint8
-                                if mask_np.dtype != np.uint8:
-                                     mask_np = mask_np.astype(np.uint8)
-
-                                # Ensure Fortran contiguous
-                                mask_np = np.asfortranarray(mask_np)
-
-                                gt_ann['segmentation'] = encode_mask(mask_np)
-                                # Ensure counts in segmentation is bytes
-                                if isinstance(gt_ann['segmentation']['counts'], str):
-                                     gt_ann['segmentation']['counts'] = gt_ann['segmentation']['counts'].encode('utf-8')
-
-
-                                coco_gt_annotations_epoch.append(gt_ann)
-
-
-                            # Convert Predictions to COCO format
-                            # Apply a threshold to the predicted masks (e.g., 0.5)
-                            mask_threshold = 0.5 # Common threshold for binary mask
-                            pred_masks_binary = (preds[i]['masks'] > mask_threshold).squeeze(1).cpu().numpy() # Shape [num_predictions, H, W], boolean or uint8
-
-                            for j in range(len(preds[i]['boxes'])):
-                                pred_ann = {
-                                    'image_id': img_id,
-                                    'category_id': preds[i]['labels'][j].item(),
-                                    'bbox': preds[i]['boxes'][j].tolist(), # [x_min, y_min, x_max, y_max] -> COCO [x, y, w, h]
-                                    'score': preds[i]['scores'][j].item(),
-                                    'segmentation': pred_masks_binary[j], # Binary mask numpy array
-                                    'area': (preds[i]['boxes'][j][2] - preds[i]['boxes'][j][0]) * (preds[i]['boxes'][j][3] - preds[i]['boxes'][j][1]), # Calculate area
-                                    'id': len(coco_dt_annotations_epoch) + 1 # Assign a unique ID for the prediction
-                                }
-                                # Convert bbox from [x_min, y_min, x_max, y_max] to [x, y, w, h] for COCO
-                                x_min, y_min, x_max, y_max = pred_ann['bbox']
-                                pred_ann['bbox'] = [x_min, y_min, x_max - x_min, y_max - y_min]
-
-                                # Convert mask numpy array to RLE format
-                                mask_np = pred_ann['segmentation']
-                                # Ensure Fortran contiguous
-                                mask_np = np.asfortranarray(mask_np)
-                                pred_ann['segmentation'] = encode_mask(mask_np)
-                                # Ensure counts in segmentation is bytes
-                                if isinstance(pred_ann['segmentation']['counts'], str):
-                                     pred_ann['segmentation']['counts'] = pred_ann['segmentation']['counts'].encode('utf-8')
-
-                                coco_dt_annotations_epoch.append(pred_ann)
-
-                        # --- End Conversion ---
+                        # Validation phase: save predictions and ground truth for COCO evaluation
+                        for pred, target in zip(preds, targets):
+                            pred = {k: v.detach().cpu() for k, v in pred.items()}
+                            target = {k: v.detach().cpu() for k, v in target.items()}
+                            outputs_list.append(pred)
+                            targets_list.append(target)
+            
             # --- End of Batch Loop ---
 
             # Calculate epoch loss
-            if phase == 'train' and scheduler:
-                scheduler.step()
+            # if phase == 'train' and scheduler:
+            #     scheduler.step()
 
             if phase == 'train':
                 epoch_loss = running_loss / dataset_sizes[phase]
@@ -216,80 +134,29 @@ def train_model(model, dataloaders, dataset_sizes, config, writer):
                 writer.add_scalar('Loss/train', epoch_loss, epoch) # Log training loss
                 print(f'{phase} Loss: {epoch_loss:.4f}', end='\n')
             else:
-                print("Computing validation metrics using COCOeval...")
-                try:
-                    # Create dummy COCO objects for evaluation
-                    # Ground truth COCO object
-                    cocoGt = COCO()
-                    # Need to add image info and category info to the dataset
-                    # Assuming val_dataset_instance has images_info and categories_info
-                    cocoGt.dataset = {
-                        'images': [image_id_to_info_val[img_id] for img_id in sorted(list(set(image_ids_epoch)))],
-                        'annotations': coco_gt_annotations_epoch,
-                        'categories': categories_info_val
-                    }
-                    cocoGt.createIndex() # Create index for faster lookup
+                print("Computing COCO metrics...")
 
-                    # Predicted COCO object
-                    cocoDt = COCO()
-                    cocoDt.dataset = {
-                        'images': [image_id_to_info_val[img_id] for img_id in sorted(list(set(image_ids_epoch)))],
-                        'annotations': coco_dt_annotations_epoch,
-                        'categories': categories_info_val # Include categories in detections as well
-                    }
-                    cocoDt.createIndex() # Create index
+                # === 這邊要做成 COCO 格式 ===
+                coco_true, coco_pred = convert_to_coco_format(targets_list, outputs_list)
 
-                    # Initialize COCOeval object
-                    coco_eval = COCOeval(cocoGt, cocoDt, iouType='segm') # Specify iouType='segm' for instance segmentation
+                coco_eval = COCOeval(coco_true, coco_pred, iouType='segm')  # 'bbox' or 'segm'
+                coco_eval.evaluate()
+                coco_eval.accumulate()
+                coco_eval.summarize()
 
-                    # Set parameters (optional, default is usually fine)
-                    # coco_eval.params.imgIds = sorted(list(set(image_ids_epoch))) # Evaluate only images present in this epoch's validation batch
-                    # coco_eval.params.catIds = sorted([cat['id'] for cat in categories_info_val]) # Evaluate all categories
+                # Extract mAP
+                epoch_mask_map = coco_eval.stats[0]  # mAP @[ IoU=0.50:0.95 | area=all | maxDets=100 ]
+                epoch_mask_map_50 = coco_eval.stats[1]  # mAP @IoU=0.5
 
-                    # Run evaluation
-                    coco_eval.evaluate()
-                    coco_eval.accumulate()
-                    # coco_eval.summarize() # Summarize prints to console, we'll extract stats instead
+                history['val_mask_map'].append(epoch_mask_map)
 
-                    # Extract metrics from coco_eval.stats
-                    # The indices for stats are fixed for COCO evaluation
-                    # See COCOeval documentation for full list
-                    # stats[0]: AP at IoU=[.5:.05:.95] for all areas and maxDets=100 (Overall Mask AP)
-                    # stats[1]: AP at IoU=.50 for all areas and maxDets=100 (Mask AP@50)
-                    # stats[2]: AP at IoU=.75 for all areas and maxDets=100 (Mask AP@75)
-                    # stats[3-5]: AP for small, medium, large objects
-                    # stats[6-8]: AR for maxDets 1, 10, 100
-                    # stats[9-11]: AR for small, medium, large objects
-
-                    epoch_mask_map = coco_eval.stats[0] # Overall Mask AP
-                    epoch_mask_map_50 = coco_eval.stats[1] # Mask AP@50
-                    # You can extract other metrics as needed, e.g., coco_eval.stats[2] for Mask AP@75
-
-                    # Note: Box mAP metrics are also available if iouType was 'bbox' or if the metric was initialized for both.
-                    # With iouType='segm', stats[0] is Mask AP.
-
-                    history['val_mask_map'].append(epoch_mask_map)
-                    history['val_mask_map_50'].append(epoch_mask_map_50)
-                    # Add other metrics to history if extracted
-
-                except Exception as e:
-                     print(f"Error computing validation metrics with COCOeval: {e}")
-                     # If metric computation fails, don't update best_map or patience_c based on it
-                     # You might want to log this error
-                     pass
-                
-                # Log validation metrics to TensorBoard
                 if writer:
                     writer.add_scalar('mAP/val_mask', epoch_mask_map, epoch)
                     writer.add_scalar('mAP_50/val_mask', epoch_mask_map_50, epoch)
 
+                print(f'{phase} Mask mAP: {epoch_mask_map:.4f}')
 
-                print(f'{phase} Mask mAP (IoU=0.5:0.95): {epoch_mask_map:.4f}')
-                print(f'{phase} Mask mAP@50: {epoch_mask_map_50:.4f}')
-
-                # Decide which metric to use for saving the best model and patience
-                # Mask mAP (especially mask_map or mask_map_50) is usually the primary metric for segmentation
-                current_best_metric = epoch_mask_map # Using overall Mask mAP for saving
+                current_best_metric = epoch_mask_map
 
                 # Save best model based on the chosen metric (e.g., Mask mAP)
                 if current_best_metric > best_map:
@@ -311,15 +178,41 @@ def train_model(model, dataloaders, dataset_sizes, config, writer):
         # load best model weights
         model.load_state_dict(torch.load(best_model_params_path))
 
+        gc.collect()
+        torch.cuda.empty_cache()
+
         if patience_c > patience:
             print("patience break!")
             break
 
     return model, history
 
+import math
+class WarmupCosineLR(torch.optim.lr_scheduler._LRScheduler):
+    def __init__(self, optimizer, warmup_iters, total_iters, last_epoch=-1):
+        self.warmup_iters = warmup_iters
+        self.total_iters = total_iters
+        super(WarmupCosineLR, self).__init__(optimizer, last_epoch)
+
+    def get_lr(self):
+        if self.last_epoch < self.warmup_iters:
+            # Warmup階段：線性上升
+            return [
+                base_lr * float(self.last_epoch + 1) / self.warmup_iters
+                for base_lr in self.base_lrs
+            ]
+        else:
+            # CosineAnnealing階段
+            cos_iter = self.last_epoch - self.warmup_iters
+            cos_total = self.total_iters - self.warmup_iters
+            return [
+                base_lr * 0.5 * (1 + math.cos(math.pi * cos_iter / cos_total))
+                for base_lr in self.base_lrs
+            ]
+            
 if __name__ == "__main__":
     DATA_DIR = 'data'
-    SAVE_NAME = "test"
+    SAVE_NAME = "warnUp_smallanchor_v2"
     
     annotation_file_path = DATA_DIR + '/train.json'
     image_directory = DATA_DIR + '/train'
@@ -338,7 +231,7 @@ if __name__ == "__main__":
     print(f"Found {len(all_image_ids)} total images in the annotation file.")
 
     # 分割圖片 ID 列表為訓練集和驗證集
-    train_ids, val_ids = split_dataset_ids(all_image_ids, train_size=0.2, random_state=63)
+    train_ids, val_ids = split_dataset_ids(all_image_ids, train_size=0.8, random_state=63)
     print(f"Split into {len(train_ids)} training images and {len(val_ids)} validation images.")
 
     # Define data transformations
@@ -370,10 +263,10 @@ if __name__ == "__main__":
     print(f"Validation dataset size: {len(val_dataset)}")
 
     # Create DataLoader for training and validation datasets
-    train_loader = DataLoader(train_dataset, batch_size=2, shuffle=True,
-                              num_workers=4, collate_fn=collate_fn)
-    val_loader = DataLoader(val_dataset, batch_size=2, shuffle=False,
-                            num_workers=4, collate_fn=collate_fn)
+    train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True,
+                              num_workers=2, collate_fn=collate_fn)
+    val_loader = DataLoader(val_dataset, batch_size=4, shuffle=False,
+                            num_workers=2, collate_fn=collate_fn)
 
     # Optionally print images with labels to verify dataset labels
     # print_image_with_mask_for_segmentation(train_dataset,save_dir="local_storage/segmentation_viz")
@@ -400,21 +293,33 @@ if __name__ == "__main__":
     model = maskrcnn_v2(num_classes=NUM_CLASSES)
     
     # Define optimizer and scheduler
-    LEARNING_RATE = 0.0001 # Can try 1e-4, 3e-4 etc.
-    WEIGHT_DECAY = 0.0001
-    optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+    optimizer = torch.optim.SGD(
+        model.parameters(), 
+        lr=0.005,               # 最終要到達的起始 lr
+        momentum=0.9, 
+        weight_decay=0.0005
+    )
 
-    # Use StepLR, you need to set step_size and gamma
-    GAMMA = 0.1     # For example, multiply the learning rate by 0.1 at each step
-    STEP_SIZE = 3
-    scheduler = StepLR(optimizer, step_size=STEP_SIZE, gamma=GAMMA)
 
-    # os.makedirs(os.path.dirname("./local_storage/params/x.cpp" + SAVE_NAME + ".pt"), exist_ok=True)
+    # 你的設定
+    warmup_iters = 100      # 前 100 iterations做warmup
+    total_iters = 2000     # 整個訓練預計跑10000個iteration（可以調）
+    scheduler = WarmupCosineLR(optimizer, warmup_iters=warmup_iters, total_iters=total_iters)
+
+    # # Define optimizer and scheduler
+    # LEARNING_RATE = 0.0001 # Can try 1e-4, 3e-4 etc.
+    # WEIGHT_DECAY = 0.0001
+    # optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+
+    # # Use StepLR, you need to set step_size and gamma
+    # GAMMA = 0.1     # For example, multiply the learning rate by 0.1 at each step
+    # STEP_SIZE = 3
+    # scheduler = StepLR(optimizer, step_size=STEP_SIZE, gamma=GAMMA)
 
     training_config = {
         'optimizer': optimizer,
-        'num_epochs': 20,
-        'patience': 5,
+        'num_epochs': 50,
+        'patience': 10,
         'scheduler': scheduler,
         'save_pt_path': "./local_storage/params/" + SAVE_NAME + ".pt",
         'val_visualize_freq': 200,

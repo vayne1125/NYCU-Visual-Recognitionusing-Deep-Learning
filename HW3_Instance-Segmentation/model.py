@@ -13,7 +13,70 @@ from torchvision.models.detection.mask_rcnn import MaskRCNN_ResNet50_FPN_V2_Weig
 # Import MultiScaleRoIAlign
 from torchvision.ops import MultiScaleRoIAlign
 import torch
+import torch.nn.functional as F
+import torch.nn as nn
+# 加在 model.backbone.body 後面，提升 pyramid feature 表達能力
+# 小型 SE Block
+class SEBlock(nn.Module):
+    def __init__(self, channels, reduction=16):
+        super().__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Linear(channels, channels // reduction),
+            nn.ReLU(inplace=True),
+            nn.Linear(channels // reduction, channels),
+            nn.Sigmoid()
+        )
+    
+    def forward(self, x):
+        b, c, _, _ = x.size()
+        y = self.avg_pool(x).view(b, c)
+        y = self.fc(y).view(b, c, 1, 1)
+        return x * y
 
+class EnhancedFPN(nn.Module):
+    def __init__(self, in_channels_list, out_channels, dropout_rate=0.2):
+        """
+        Args:
+            in_channels_list (list[int]): [C2, C3, C4, C5] 的輸入 channel 數量
+            out_channels (int): 最後輸出的 feature channel 數
+            dropout_rate (float): Dropout rate，預設是 0.2
+        """
+        super().__init__()
+
+        self.lateral_convs = nn.ModuleList()
+        self.dropout_rate = dropout_rate
+
+        for in_channels in in_channels_list:
+            self.lateral_convs.append(nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=1),
+                nn.ReLU(inplace=True),
+                nn.Dropout2d(p=self.dropout_rate),  # Dropout加在這
+                nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+                nn.ReLU(inplace=True),
+                nn.Dropout2d(p=self.dropout_rate),  # Dropout再加一次
+            ))
+        
+        self.output_convs = nn.ModuleList([
+            nn.Sequential(
+                nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+                nn.ReLU(inplace=True),
+                nn.Dropout2d(p=self.dropout_rate),  # 出來後也丟一點
+                SEBlock(out_channels)
+            )
+            for _ in range(len(in_channels_list))
+        ])
+
+    def forward(self, inputs):
+        lateral_features = [lateral_conv(x) for lateral_conv, x in zip(self.lateral_convs, inputs)]
+
+        for i in range(len(lateral_features) - 1, 0, -1):
+            upsample = F.interpolate(lateral_features[i], size=lateral_features[i-1].shape[-2:], mode="nearest")
+            lateral_features[i-1] += upsample
+        
+        outputs = [output_conv(f) for output_conv, f in zip(self.output_convs, lateral_features)]
+        return outputs
+    
 def maskrcnn_v2(num_classes):
     """
     Returns a Mask R-CNN V2 model with ResNet50-FPN backbone,
@@ -28,7 +91,8 @@ def maskrcnn_v2(num_classes):
     """
     # Custom Anchor settings (suitable for small objects)
     # Based on previous analysis, these anchors are a good starting point for your data
-    anchor_sizes = ((8,), (16,), (32,), (64,), (128,))
+    # anchor_sizes = ((8,), (16,), (32,), (64,), (128,))
+    anchor_sizes = ((2,), (4,), (8,), (16,), (32,), (64,))
     aspect_ratios = ((0.5, 1.0, 2.0),) * len(anchor_sizes)
 
     # REMOVED: Explicit creation of anchor_generator instance
@@ -46,6 +110,8 @@ def maskrcnn_v2(num_classes):
         rpn_aspect_ratios=aspect_ratios
         # REMOVED: rpn_anchor_generator=anchor_generator
     )
+
+    # model.fpn = EnhancedFPN(in_channels_list=[256, 512, 1024, 2048], out_channels=256)
 
     # --- Modify the prediction heads for the custom number of classes ---
 
@@ -86,9 +152,14 @@ def maskrcnn_v2(num_classes):
     # You can also modify RoIHeads parameters like score_thresh, nms_thresh etc. here if needed
     # model.roi_heads.score_thresh = 0.5 # Example: Adjust score threshold
     # model.roi_heads.nms_thresh = 0.3   # Example: Adjust NMS threshold
+    # model.rpn.nms_thresh = 0.7
+    # model.roi_heads.score_thresh = 0.05
+    # model.rpn.pre_nms_top_n_test = 1000
+    # model.rpn.post_nms_top_n_test = 300
 
     return model
 
+    
 # --- Example Usage ---
 if __name__ == '__main__':
     NUM_CLASSES = 5 # Example: 4 cell types + background

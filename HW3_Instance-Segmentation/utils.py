@@ -10,6 +10,67 @@ from matplotlib import patches
 import torch
 
 from sklearn.model_selection import train_test_split
+from pycocotools.coco import COCO
+from pycocotools import mask as maskUtils
+
+def convert_to_coco_format(targets, outputs):
+    coco_gt = {"images": [], "annotations": [], "categories": []}
+    coco_dt = []
+
+    category_ids = set()
+
+    for idx, (target, output) in enumerate(zip(targets, outputs)):
+        image_id = idx  # 可以是 idx，或真實的 image id
+
+        coco_gt["images"].append({
+            "id": image_id,
+            "width": target["masks"].shape[-1],
+            "height": target["masks"].shape[-2],
+        })
+
+        masks = target["masks"].numpy()
+        labels = target["labels"].numpy()
+        boxes = target["boxes"].numpy()
+
+        for i in range(len(masks)):
+            rle = maskUtils.encode(np.asfortranarray(masks[i]))
+            rle["counts"] = rle["counts"].decode("utf-8")  # json 可存
+            coco_gt["annotations"].append({
+                "id": len(coco_gt["annotations"]),
+                "image_id": image_id,
+                "category_id": int(labels[i]),
+                "segmentation": rle,
+                "bbox": list(boxes[i]),
+                "area": float(maskUtils.area(rle)),
+                "iscrowd": 0,
+            })
+            category_ids.add(int(labels[i]))
+
+        pred_masks = output["masks"].numpy()
+        pred_labels = output["labels"].numpy()
+        pred_boxes = output["boxes"].numpy()
+        pred_scores = output["scores"].numpy()
+
+        for i in range(len(pred_masks)):
+            rle = maskUtils.encode(np.asfortranarray(pred_masks[i, 0] > 0.5))
+            rle["counts"] = rle["counts"].decode("utf-8")
+            coco_dt.append({
+                "image_id": image_id,
+                "category_id": int(pred_labels[i]),
+                "segmentation": rle,
+                "bbox": list(pred_boxes[i]),
+                "score": float(pred_scores[i]),
+            })
+
+    coco_gt["categories"] = [{"id": cid, "name": str(cid)} for cid in sorted(category_ids)]
+
+    coco_true = COCO()
+    coco_true.dataset = coco_gt
+    coco_true.createIndex()
+
+    coco_pred = coco_true.loadRes(coco_dt)
+
+    return coco_true, coco_pred
 
 def plot_training_history(history, save_name):
     """
@@ -36,7 +97,7 @@ def plot_training_history(history, save_name):
     # --- Plot the mAP ---
     plt.subplot(1, 2, 2)
     # Using a different color for clarity
-    plt.plot(history['val_map'], label='valid mAP', color='orange')
+    plt.plot(history['val_mask_map'], label='valid mask mAP', color='orange')
     plt.xlabel('epoch')
     plt.ylabel('Mean Average Precision (mAP)')
     plt.ylim([0, 1.0])  # mAP is typically between 0 and 1
