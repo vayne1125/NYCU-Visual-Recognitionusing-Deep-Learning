@@ -1,11 +1,9 @@
 import torch
-import torchvision
 import torchvision.transforms as T
 from PIL import Image
 import os
 import json
 import numpy as np
-from pycocotools import mask as maskUtils # For RLE encoding
 from model import maskrcnn_v2
 
 from utils import encode_mask
@@ -100,10 +98,6 @@ def run_inference(model, image_dir, output_json_path, image_id_map_path, device,
             labels = preds['labels'][keep]
             scores = preds['scores'][keep]
             masks = preds['masks'][keep] # Predicted masks (logits or probabilities)
-
-            # Get image dimensions (needed for segmentation size)
-            width, height = img.size
-
 
             # Convert predictions to COCO Detection Results format
             if boxes.numel() > 0: # Check if any detections passed the threshold

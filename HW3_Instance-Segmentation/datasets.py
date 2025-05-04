@@ -1,19 +1,36 @@
+"""
+datasets.py
+
+This module defines a custom PyTorch Dataset class `CustomDataset` for loading images
+and annotations in COCO format, including support for instance masks. It is designed
+to work with object detection and instance segmentation models like Mask R-CNN.
+"""
 import os
-import numpy as np
+import json
 import torch
 from torch.utils.data import Dataset
 from PIL import Image
 from torchvision import transforms
-import json
 
 from utils import decode_maskobj
 
+
 class CustomDataset(Dataset):
+    """
+    A custom Dataset for loading COCO-style annotations and images with optional
+    instance masks. Designed to support models like Mask R-CNN.
+
+    Args:
+        annotation_file_path (str): Path to COCO format annotation JSON.
+        image_dir (str): Path to image directory.
+        image_ids_subset (list, optional): Optional subset of image IDs to use.
+        transform (callable, optional): Optional torchvision transform for the image.
+    """
     def __init__(self, annotation_file_path, image_dir, image_ids_subset=None, transform=None):
         """
         Args:
-            annotation_file_path (str): Path to the COCO format annotation JSON file (e.g., './data/train.json').
-            image_dir (str): Path to the root directory containing the image folders (e.g., './data/train/').
+            annotation_file_path (str): Path to the COCO format annotation JSON file.
+            image_dir (str): Path to the root directory containing the image folders.
                              這個目錄下應該包含 generate_coco_annotations 產生的那些子資料夾。
             transform (callable, optional): Optional transform to be applied on a sample.
                                             這個 transform 應該能處理 PIL Image 並返回 Tensor。
@@ -22,8 +39,8 @@ class CustomDataset(Dataset):
         self.annotation_file_path = annotation_file_path
         self.image_dir = image_dir
         self.transform = transform
-        self.image_ids_subset = image_ids_subset # 儲存圖片 ID 子集
-        
+        self.image_ids_subset = image_ids_subset  # 儲存圖片 ID 子集
+
         self._load_annotations()
 
     def _load_annotations(self):
@@ -52,7 +69,8 @@ class CustomDataset(Dataset):
         # 根據 image_ids_subset 篩選要使用的圖片 ID
         if self.image_ids_subset is not None:
             # 只保留在子集中的圖片 ID，並且這些 ID 必須實際存在於 annotation 文件中
-            self.image_ids = sorted([img_id for img_id in self.image_ids_subset if img_id in self.image_id_to_info])
+            self.image_ids = sorted(
+                [img_id for img_id in self.image_ids_subset if img_id in self.image_id_to_info])
             print(f"Using a subset of {len(self.image_ids)} images.")
         else:
             # 如果沒有提供子集，使用所有有標註的圖片 ID，並排序
@@ -60,9 +78,8 @@ class CustomDataset(Dataset):
             print(f"Using all {len(self.image_ids)} images with annotations.")
 
         # 建立 category_id 到 category_name 的映射字典
-        self.category_id_to_name = {cat['id']: cat['name'] for cat in self.categories_info}
-        # print(f"Found {len(self.images_info)} images, {len(self.annotations_info)} annotations, and {len(self.categories_info)} categories.")
-
+        self.category_id_to_name = {cat['id']: cat['name']
+                                    for cat in self.categories_info}
 
     def __len__(self):
         """Returns the total number of images in the dataset."""
@@ -93,7 +110,6 @@ class CustomDataset(Dataset):
         # 獲取原始圖片尺寸，在 target 中有用
         orig_img_w, orig_img_h = image.size
 
-
         # 獲取這張圖片的所有標註
         annotations = self.image_id_to_annotations.get(image_id, [])
 
@@ -114,12 +130,11 @@ class CustomDataset(Dataset):
 
             # 提取分割資訊並解碼為二值 mask (numpy array)
             segmentation = ann['segmentation']
-            try:
-                binary_mask = decode_maskobj(segmentation)
-                masks_list.append(binary_mask) # binary_mask 是 HxW 的 numpy array (uint8)
-            except ValueError as e:
-                print(f"Error decoding segmentation for annotation ID {ann.get('id', 'N/A')} in image ID {image_id}: {e}. Skipping this mask.")
-                pass
+
+            binary_mask = decode_maskobj(segmentation)
+            # binary_mask 是 HxW 的 numpy array (uint8)
+            masks_list.append(binary_mask)
+
 
         # 將列表轉換為 PyTorch Tensors
         # 邊界框 Tensor，形狀 (num_instances, 4)
@@ -129,12 +144,14 @@ class CustomDataset(Dataset):
 
         # 將二值 mask (numpy array) 列表堆疊為一個 Tensor，形狀 (num_instances, H, W)
         # Mask R-CNN 模型通常期望 uint8 格式的 masks
-        if masks_list: # 只有當 masks 列表非空時才堆疊
-            masks_tensor = torch.stack([torch.as_tensor(mask, dtype=torch.uint8) for mask in masks_list])
+        if masks_list:  # 只有當 masks 列表非空時才堆疊
+            masks_tensor = torch.stack(
+                [torch.as_tensor(mask, dtype=torch.uint8) for mask in masks_list])
         else:
-             # 如果沒有任何 masks，返回一個空的 masks tensor
-             # 需要指定正確的尺寸 (num_instances=0, H, W)
-             masks_tensor = torch.empty((0, orig_img_h, orig_img_w), dtype=torch.uint8)
+            # 如果沒有任何 masks，返回一個空的 masks tensor
+            # 需要指定正確的尺寸 (num_instances=0, H, W)
+            masks_tensor = torch.empty(
+                (0, orig_img_h, orig_img_w), dtype=torch.uint8)
 
         # 創建訓練所需的 target 字典
         target = {}
@@ -143,12 +160,7 @@ class CustomDataset(Dataset):
         target["masks"] = masks_tensor
         # 圖片 ID Tensor，形狀 (1,)
         target["image_id"] = torch.tensor([image_id])
-        # (可選) 添加面積和 iscrowd 資訊到 target 中
-        # target["area"] = torch.as_tensor([ann['area'] for ann in annotations], dtype=torch.float32)
-        # target["iscrowd"] = torch.as_tensor([ann['iscrowd'] for ann in annotations], dtype=torch.int64)
-        # 添加原始圖片尺寸，在應用 transform 時非常有用
         target["orig_size"] = torch.as_tensor([orig_img_h, orig_img_w])
-
 
         # --- 應用 transform ---
         if self.transform is not None:
@@ -157,6 +169,6 @@ class CustomDataset(Dataset):
         # 確保返回的圖片是 Tensor
         # 如果 transform 包含 ToTensor，這步會多餘
         if not isinstance(image, torch.Tensor):
-             image = transforms.ToTensor()(image)
+            image = transforms.ToTensor()(image)
 
         return image, target
