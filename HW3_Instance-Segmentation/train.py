@@ -279,7 +279,7 @@ class WarmupCosineLR(torch.optim.lr_scheduler._LRScheduler):
 
 if __name__ == "__main__":
     DATA_DIR = 'data'
-    SAVE_NAME = "warnUp_smallanchor_light"
+    SAVE_NAME = "best"
 
     annotation_file_path = DATA_DIR + '/train.json'
     image_directory = DATA_DIR + '/train'
@@ -334,9 +334,9 @@ if __name__ == "__main__":
 
     # Create DataLoader for training and validation datasets
     train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True,
-                              num_workers=4, collate_fn=collate_fn)
+                              num_workers=2, collate_fn=collate_fn)
     val_loader = DataLoader(val_dataset, batch_size=4, shuffle=False,
-                            num_workers=4, collate_fn=collate_fn)
+                            num_workers=2, collate_fn=collate_fn)
 
     # Optionally print images with labels to verify dataset labels
     # if you want to use, you should import form utils
@@ -377,6 +377,8 @@ if __name__ == "__main__":
     num_epochs = 50
     total_iters = len(train_loader) * num_epochs
     warmup_iters = total_iters // 20
+    # total_iters = 2000
+    # warmup_iters = 100
     scheduler = WarmupCosineLR(
         optimizer, warmup_iters=warmup_iters, total_iters=total_iters)
 

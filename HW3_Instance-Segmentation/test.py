@@ -4,7 +4,7 @@ from PIL import Image
 import os
 import json
 import numpy as np
-from model import maskrcnn_v2
+from model import light_maskrcnn_v2
 
 from utils import encode_mask
 
@@ -159,7 +159,7 @@ def run_inference(model, image_dir, output_json_path, image_id_map_path, device,
 
 if __name__ == "__main__":
     # --- Configuration ---
-    SAVE_NAME = "warnUp_smallanchor_v2"
+    SAVE_NAME = "best"
     IMAGE_DIR = './data/test_release' # Directory containing your .tif test images
     MODEL_PATH = './local_storage/params/' + SAVE_NAME + '.pt' # Path to your trained model checkpoint
     OUTPUT_JSON_PATH = './local_storage/zip/test-results.json' # Output JSON file path
@@ -171,7 +171,7 @@ if __name__ == "__main__":
     print(f"Using device: {device}")
 
     # --- Load Model ---
-    model = maskrcnn_v2(num_classes=NUM_CLASSES) # Initialize model architecture
+    model = light_maskrcnn_v2(num_classes=NUM_CLASSES) # Initialize model architecture
     try:
         model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
         print(f"Model loaded successfully from {MODEL_PATH}")
