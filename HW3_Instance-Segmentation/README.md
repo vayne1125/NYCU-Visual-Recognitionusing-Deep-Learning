@@ -8,7 +8,7 @@ In this assignment, we aim to train a deep learning model for cell instance segm
 
 I employed the Mask R-CNN model with a ResNet-50 FPN v2 backbone. During experimentation, I explored various model adjustments, such as modifying the FPN structure, tuning anchor sizes, and adjusting the learning rate schedule through different schedulers. For image preprocessing, I simply converted all images to grayscale to reduce color variance and simplify input channels.
 
-The raw dataset was first converted to the COCO format with instance-level annotations. After training and tuning, the final model achieved a mean average precision (mAP) score of **0.3788** on the validation set, demonstrating reasonable segmentation performance on complex biomedical images.
+The raw dataset was first converted to the COCO format with instance-level annotations. After training and tuning, the final model achieved a mean average precision (mAP) score of **0.3781** on the public test, demonstrating reasonable segmentation performance on complex biomedical images.
 
 
 ## How to install
@@ -66,7 +66,7 @@ python test.py
 ```
 
 ## Performance snapshot
-Ranked 8th as of April 30.
+Ranked 20th as of May 5.
 <img src="./assets/snapshot.png">
 
 ### About Best Parameter Info
