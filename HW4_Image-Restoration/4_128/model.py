@@ -317,11 +317,11 @@ class PromptIR(nn.Module):
         
         self.refinement = nn.Sequential(*[TransformerBlock(dim=int(dim*2**1), num_heads=heads[0], ffn_expansion_factor=ffn_expansion_factor, bias=bias, LayerNorm_type=LayerNorm_type) for i in range(num_refinement_blocks)])
                     
-        # self.output = nn.Conv2d(int(dim*2**1), out_channels, kernel_size=3, stride=1, padding=1, bias=bias)
+        self.output = nn.Conv2d(int(dim*2**1), out_channels, kernel_size=3, stride=1, padding=1, bias=bias)
 
         # 313551052
-        self.final_upsample = Upsample(int(dim*2**1))
-        self.output = nn.Conv2d(int(dim*2**1) // 2, out_channels, kernel_size=3, stride=1, padding=1, bias=bias)
+        # self.final_upsample = Upsample(int(dim*2**1))
+        # self.output = nn.Conv2d(int(dim*2**1) // 2, out_channels, kernel_size=3, stride=1, padding=1, bias=bias)
 
     def forward(self, inp_img,noise_emb = None):
 
@@ -378,31 +378,8 @@ class PromptIR(nn.Module):
         out_dec_level1 = self.refinement(out_dec_level1)
 
         # 313551052
-        # out_dec_level1 = self.output(out_dec_level1) + inp_img
-        # return out_dec_level1
-
-        # --- 應用最終的上採樣層 ---
-        # 將尺寸從 128x128 提升到 256x256
-        final_upsampled_features = self.final_upsample(out_dec_level1) # 尺寸變為 [N, int(dim*2**1)//4, 256, 256]
-
-        # --- 應用最終的 output 卷積層 ---
-        output_img = self.output(final_upsampled_features) # 尺寸變為 [N, out_channels, 256, 256]
-
-
-        # --- 處理殘差連接 (Residual Connection) ---
-        # 原始的 `+ inp_img` 假定輸出和輸入尺寸相同
-        # 現在輸入是 128x128，輸出是 256x256
-        # 需要將原始 128x128 輸入影像放大到 256x256 再與模型最終輸出相加作為殘差
-        # 使用 torch.nn.functional.interpolate 進行插值放大
-        # 目標尺寸應該與 output_img 的空間尺寸匹配
-        inp_img_upscaled = F.interpolate(inp_img, size=(output_img.shape[2], output_img.shape[3]), mode='bicubic', align_corners=False)
-
-        # 將放大後的輸入影像與模型的最終輸出相加作為殘差
-        final_restored_img = output_img + inp_img_upscaled # 尺寸 [N, out_channels, 256, 256]
-
-
-        # 返回最終的 256x256 結果
-        return final_restored_img
+        out_dec_level1 = self.output(out_dec_level1) + inp_img
+        return out_dec_level1
 
 
 

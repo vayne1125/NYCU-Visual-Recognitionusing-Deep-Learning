@@ -7,6 +7,9 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from torchmetrics.image import PeakSignalNoiseRatio
 import torchvision.transforms as T
+from lightning.pytorch.callbacks import EarlyStopping
+from sklearn.model_selection import train_test_split
+from torch.utils.data import Dataset, Subset # 確保導入
 
 # from utils.dataset_utils import PromptTrainDataset
 from datasets import CustomDataset
@@ -27,6 +30,7 @@ class PromptIRModel(pl.LightningModule):
         super().__init__()
         self.net = PromptIR(decoder=True)
         self.loss_fn  = nn.L1Loss()
+        # self.loss_fn = nn.MSELoss()
 
         # --- 在這裡初始化驗證集 PSNR 指標 ---
         # 使用 torchmetrics.regression.PeakSignalNoiseRatio
@@ -49,8 +53,8 @@ class PromptIRModel(pl.LightningModule):
         return loss
     
     def lr_scheduler_step(self,scheduler,metric):
-        scheduler.step(self.current_epoch)
-        lr = scheduler.get_lr()
+        scheduler.step()
+        lr = scheduler.get_last_lr()
     
     def configure_optimizers(self):
         optimizer = optim.AdamW(self.parameters(), lr=2e-4)
@@ -60,16 +64,9 @@ class PromptIRModel(pl.LightningModule):
 
         # --- 在這裡添加 validation_step 方法 ---
     def validation_step(self, batch, batch_idx):
-        # 從 batch 中解包數據 (假設結構和 training_step 一樣)
         degrad_patch, clean_patch = batch
 
-        # 將有雨水影像傳入模型，得到模型預測的乾淨影像
-        # 注意：在 validation_step 中，PyTorch Lightning 預設會關閉梯度計算 (torch.no_grad())
         predicted_patch = self.net(degrad_patch)
-
-        # --- 計算驗證集 PSNR ---
-        # 調用 self.val_psnr 實例，傳入模型預測結果和真實的乾淨影像
-        # self.val_psnr 會在內部累積當前 Epoch 所有 batch 的 PSNR 狀態
         self.val_psnr(predicted_patch, clean_patch)
 
         # --- 記錄驗證集 PSNR 指標 ---
@@ -79,11 +76,8 @@ class PromptIRModel(pl.LightningModule):
         # prog_bar=True 讓指標顯示在進度條中
         self.log("val_psnr", self.val_psnr, on_step=False, on_epoch=True, prog_bar=True)
 
-        # 可選：計算並記錄驗證損失
         val_loss = self.loss_fn(predicted_patch, clean_patch)
         self.log("val_loss", val_loss, on_step=False, on_epoch=True)
-
-        # validation_step 的返回值通常不是必須的，除非你在 on_validation_epoch_end 需要進一步處理
 
 def main():
     # print("Options")
@@ -97,46 +91,88 @@ def main():
     if not os.path.exists(LOCAL_SAVE_DIR):
         os.makedirs(LOCAL_SAVE_DIR, exist_ok=True)
 
-    SAVE_NAME = "test"
+    SAVE_NAME = "128_to_256/"
     logger = TensorBoardLogger(save_dir = LOCAL_SAVE_DIR + "runs/")
 
     DATA_DIR = "hw4_realse_dataset/train"
-    CHECKPOINT_DIR = LOCAL_SAVE_DIR + "params"
+    CHECKPOINT_DIR = LOCAL_SAVE_DIR + "params/" + SAVE_NAME
 
     BATCH_SIZE = 4
-    EPOCHS = 10
-    
-    train_transform = T.Compose([
-        T.ToTensor(),
-        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    EPOCHS = 50
+    resize_size = (128, 128)
+
+    transform = T.Compose([
+        T.Resize(resize_size),
+        T.ToTensor()
+        # T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
 
-    train_dataset = CustomDataset(root_dir=DATA_DIR, transform=train_transform)
+    transform_degraded = T.Compose([
+        T.Resize(resize_size),
+        T.Resize(resize_size),
+        T.ToTensor()
+        # T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
 
-    total_size = len(train_dataset)
-    train_size = int(0.8 * total_size)
-    val_size = total_size - train_size
-    train_dataset, val_dataset = torch.utils.data.random_split(train_dataset, [train_size, val_size])
+    transform_clean = T.Compose([
+        # T.Resize(resize_size),
+        T.ToTensor()
+        # T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+    
+    full_dataset = CustomDataset(DATA_DIR, transform_degraded=transform_degraded, transform_clean=transform_clean)
+    sample_types = full_dataset.img_type
+    all_indices = list(range(len(full_dataset)))
+
+    train_indices, val_indices = train_test_split(
+        all_indices,
+        test_size=0.2,
+        stratify=sample_types, # 這裡傳入包含每個樣本類型信息的列表
+        random_state=63
+    )
+
+    train_dataset = Subset(full_dataset, train_indices)
+    val_dataset = Subset(full_dataset, val_indices)
+
+    print(f"訓練集大小: {len(train_dataset)}")
+    print(f"驗證集大小: {len(val_dataset)}")
+
+    # total_size = len(train_dataset)
+    # train_size = int(0.8 * total_size)
+    # val_size = total_size - train_size
+    # train_dataset, val_dataset = torch.utils.data.random_split(train_dataset, [train_size, val_size])
     
     checkpoint_callback = ModelCheckpoint(
         dirpath = CHECKPOINT_DIR,
-        filename= SAVE_NAME + 'best_psnr-{epoch:03d}-{val_psnr:.2f}',
+        filename= 'best_psnr-{epoch:03d}-{val_psnr:.2f}',
         every_n_epochs = 1,     # 每 Epoch 結束時檢查一次
-        save_top_k=1,           # 只保留最佳的一個
+        save_top_k=5,           # 只保留最佳的一個
         monitor='val_psnr',     # <--- 監控名為 'val_psnr' 的指標
         mode='max'              # <--- 設定模式為 'max'，表示這個指標越大越好
     )
 
+    early_stop_callback = EarlyStopping(
+        monitor='val_psnr', # 要監控的指標名稱，必須在 self.log 中精確匹配
+        min_delta=0.00,     # 指標改善的最小幅度，小於此值不算改善 (可選)
+        patience=EPOCHS//5, # 在最佳 Epoch 後，連續多少個 Epoch 沒有改善就停止
+        verbose=True,       # 是否在早停時打印訊息 (建議設為 True)
+        mode='max'          # 'val_psnr' 指標是越大越好
+    )
+    # 這裡的 train_dataset 和 val_dataset 是 CustomDataset 的實例    
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True,
                               num_workers=4)
     
-    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=True,
+    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False,
                               num_workers=4)
-    
-    plot_and_save_image_pairs(train_dataset, num_pairs_to_plot=8, save_path="local/train_image_pairs_first_8.png")
+    # return 
+    # plot_and_save_image_pairs(train_dataset, num_pairs_to_plot=8, save_path="local/train_image_pairs_first_8.png")
     model = PromptIRModel()
-    
-    trainer = pl.Trainer( max_epochs=EPOCHS, accelerator="gpu", logger=logger, callbacks=[checkpoint_callback])
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # model = PromptIRModel.load_from_checkpoint(
+    #          checkpoint_path = 'local/params/test2/testbest_psnr-epoch=018-val_psnr=26.24.ckpt',
+    #          map_location=device,
+    #     )
+    trainer = pl.Trainer( max_epochs=EPOCHS, accelerator="gpu", logger=logger, callbacks=[checkpoint_callback, early_stop_callback])
     trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
 
 
