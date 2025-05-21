@@ -226,7 +226,7 @@ if __name__ == "__main__":
     OUTPUT_DIR = 'local/results'
     TEST_DATA_ROOT = 'hw4_realse_dataset/test/'  # Your test set root directory
 
-    SAVE_NAME = "./finetune3/best_psnr-epoch=059-val_psnr=28.60"  # Your checkpoint name
+    SAVE_NAME = "./part2/best_params"  # Your checkpoint name
 
     # Full path to the checkpoint
     MODEL_PATH = os.path.join('local/params', SAVE_NAME + '.ckpt')

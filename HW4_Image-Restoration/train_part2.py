@@ -218,19 +218,15 @@ if __name__ == '__main__':
     )
 
     early_stop_callback = EarlyStopping(
-        monitor='val_psnr',  # Name of the metric to monitor, must precisely match in self.log
-        # Minimum improvement in the monitored metric to count as an improvement (optional)
+        monitor='val_psnr',
         min_delta=0.00,
-        # Number of consecutive epochs without improvement after the best Epoch to stop
         patience=EPOCHS//5,
-        # Whether to print messages when early stopping (recommended True)
         verbose=True,
-        mode='max'          # 'val_psnr' metric: higher is better
+        mode='max'
     )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     MODEL_NAME = "part1/best_params"  # Your checkpoint name
-    # Full path to the checkpoint
     MODEL_PATH = os.path.join('local/params', MODEL_NAME + '.ckpt')
 
     model = PromptIRModel.load_from_checkpoint(

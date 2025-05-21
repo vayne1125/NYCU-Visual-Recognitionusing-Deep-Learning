@@ -147,7 +147,7 @@ if __name__ == '__main__':
     CHECKPOINT_DIR = LOCAL_SAVE_DIR + "params/" + SAVE_NAME
 
     BATCH_SIZE = 1
-    EPOCHS = 5
+    EPOCHS = 50
 
     transform = T.Compose([
         T.ToTensor()
@@ -158,24 +158,10 @@ if __name__ == '__main__':
     sample_types = full_dataset.img_type
     all_indices = list(range(len(full_dataset)))
 
-    # train_indices, val_indices = train_test_split(
-    #     all_indices,
-    #     test_size=0.2,
-    #     stratify=sample_types, # Pass a list containing type information for each sample here
-    #     random_state=63
-    # )
-
-    tp_indices, train_indices = train_test_split(
+    train_indices, val_indices = train_test_split(
         all_indices,
-        test_size=0.1,
-        stratify=sample_types,  # Pass a list containing type information for each sample here
-        random_state=63
-    )
-
-    tp_indices, val_indices = train_test_split(
-        all_indices,
-        test_size=0.1,
-        stratify=sample_types,  # Pass a list containing type information for each sample here
+        test_size=0.2,
+        stratify=sample_types, # Pass a list containing type information for each sample here
         random_state=63
     )
 
@@ -201,17 +187,15 @@ if __name__ == '__main__':
     )
 
     early_stop_callback = EarlyStopping(
-        monitor='val_psnr',  # Name of the metric to monitor, must precisely match in self.log
-        # Minimum improvement in the monitored metric to count as an improvement (optional)
+        monitor='val_psnr',
         min_delta=0.00,
-        # Number of consecutive epochs without improvement after the best Epoch to stop
         patience=EPOCHS//5,
-        # Whether to print messages when early stopping (recommended True)
         verbose=True,
-        mode='max'          # 'val_psnr' metric: higher is better
+        mode='max' 
     )
-    plot_and_save_image_pairs(train_dataset, num_images_to_plot=4,
-                              save_path="local/train_image_pairs_first_8.png")
+
+    # plot_and_save_image_pairs(train_dataset, num_images_to_plot=4,
+    #                           save_path="local/train_image_pairs_first_8.png")
 
     model = PromptIRModel()
     trainer = pl.Trainer(max_epochs=EPOCHS, accelerator="gpu", logger=logger, callbacks=[
